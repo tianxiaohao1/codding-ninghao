@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no">
+  <title>视频播放</title>
+  <link rel="stylesheet" href="./static/boot/css/bootstrap.css">
+  <link rel="stylesheet" href="./static/css/main.css">
+</head>
+<body>
+
+<div id="app">
+  <div class="flex-layout">
+    <form>
+      <div class="box-url flex-layout flex-row">
+        <div class="btn-group" style="margin-right: -1px;">
+          <span class="btn btn-default" onclick="history.back()">
+            <i class="glyphicon glyphicon-arrow-left"></i>
+          </span>
+          <span class="btn btn-default" onclick="history.forward()">
+            <i class="glyphicon glyphicon-arrow-right"></i>
+          </span>
+          <span class="btn btn-default" onclick="location.reload()">
+            <i class="glyphicon glyphicon-refresh"></i>
+          </span>
+        </div>
+        <div class="auto-flex">
+          <input type="text" class="form-control" :value="_router" style="border-radius: 0;">
+        </div>
+      </div>
+    </form>
+    <div class="topbar">
+      <div class="flex-layout flex-row">
+        <div class="logo">视频播放器</div>
+      </div>
+    </div>
+    <div class="auto-flex layout-respond box-main-wrap">
+      <div class="panel-nav">
+        <div class="flex-layout">
+          <div class="space">
+            <input type="text" class="form-control" v-model="r.sChannel" @input="updateRouter({idxChannel: 0, idxAlbum: 0})">
+          </div>
+          <div class="auto-flex">
+            <ul>
+              <li
+                v-for="(item, idx) in seedList"
+                :class="['gray-title', {on: idx === idxChannel}]"
+                @click="updateRouter({idxChannel: idx, idxAlbum: 0}, 'push')"
+                :title="item.title + '\n' + item.alias"
+              >{{item.title | title}}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="panel-nav">
+        <div class="flex-layout">
+          <!-- <div class="space">
+            <input type="text" class="form-control">
+          </div> -->
+          <div class="auto-flex">
+            <ul>
+              <li
+                v-for="(item, idx) in curChannel.children"
+                :class="['gray-title', {on: idx === idxAlbum}]"
+                @click="updateRouter({idxAlbum: idx}, 'push')"
+                :title="item.title"
+              >{{item.title}}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="auto-flex flex-layout">
+        <div class="gray-title">
+          <span>{{curAlbum.title}}</span>
+          <div class="fr">
+            <a :href="videoUrl" target="_blank" class="btn btn-success btn-xs">官方播放</a>
+          </div>
+        </div>
+        <div class="auto-flex box-video">
+          <!-- {{curAlbum.videoUrl}} -->
+          <video controls="" 
+            :src="videoUrl"
+            autoplay="" 
+            webkit-playsinline=""
+            playsinline=""
+            x5-playsinline=""
+            x-webkit-airplay="allow"
+            @timeupdate="handleTimeUpdate"
+            @ended="playEnd"
+          ></video>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window._require = window.require
+delete window.require
+delete window.module
+delete window.export
+</script>
+<script src="./static/js/dmAux.js"></script>
+<script src="./static/js/jq.js"></script>
+<script src="./static/js/vue.js"></script>
+<script>
+;(() => {
+    
+  if (window._require) {
+    var http = _require('http')
+    var https = _require('https')
+    var fs = _require('fs')
+  }
+
+  const vm = new Vue({
+    el: '#app',
+    data() {
+      let mapPlayTime = {}
+
+      try {mapPlayTime = JSON.parse(localStorage.mapPlayTime)} catch (e) {}
+
+      return {
+        mapPlayTime,
+        router: {},
+        seedUrl: './src/ninghao/seed.json',
+        seed: [],
+      }
+    },
+    filters: {
+      title(title = '') {
+        // return title.search('：') > -1 ? title.slice(title.lastIndexOf('：') + 1) : title
+        return title.replace('移动应用', '').replace('', '')
+      }
+    },
+    computed: {
+      r() {
+        return this.router
+      },
+      idxChannel() {
+        return this.router.idxChannel || 0
+      },
+      idxAlbum() {
+        return this.router.idxAlbum || 0
+      },
+      curChannel() {
+        return this.seedList[this.idxChannel] || {title: '', children: []}
+      },
+      curAlbum() {
+        const vm = this.$root
+        const r = vm.router
+        return vm.curChannel.children[this.idxAlbum] || {}
+      },
+      _router() {
+        return JSON.stringify(this.router)
+      },
+      seedList() {
+        const vm = this.$root
+        const r = this.router
+        const sChannel = (r.sChannel || '').trim().toLowerCase()
+
+        return vm.seed.filter((v) => {
+          return !sChannel || [v.title, v.alias].some((str) => {
+            return str.toLowerCase().indexOf(sChannel) > -1
+          })
+        }).reverse()
+      },
+      videoUrl() {
+        return this.curAlbum.videoUrl || ''
+      },
+    },
+    watch: {
+      router: {
+        deep: true,
+        handler(newVal) {
+          console.warn('router changed')
+          let hashData = JSON.stringify(newVal)
+          let targetUrl = location.origin + location.pathname + location.search + '#' + hashData
+          history[vm.isRouterPush ? 'pushState' : 'replaceState']({}, '', targetUrl)
+          delete vm.isRouterPush
+        },
+      },
+      mapPlayTime: {
+        deep: true,
+        handler(newVal) {
+          localStorage.mapPlayTime = JSON.stringify(newVal)
+        },
+      },
+      'r.sChannel'(newVal, oldVal) {
+        // const r = this.router
+
+        // if (oldVal === undefined) {
+        //   r.idxChannel = r.idxAlbum = 0
+        // }
+      },
+      'router.idxChannel'() {
+        // this.router.idxAlbum = 0
+      },
+      videoUrl(videoUrl) {
+        const vm = this.$root
+
+        vm.$nextTick(() => {
+          document.querySelector('#app video').currentTime = vm.mapPlayTime[videoUrl] || 0
+        })
+      },
+    },
+    methods: {
+      initRouter() {
+        let r = {}
+
+        try {
+          r = JSON.parse(decodeURIComponent(location.hash.substring(1)))
+        } catch (e) {
+          console.log('router parse err')
+        }
+
+        this.router = r
+      },
+      initEvents() {
+        const vm = this.$root
+
+        window.onpopstate = function() {
+          vm.initRouter()
+        }
+      },
+      writeCache() {
+        console.log('writeCache')
+        const vm = this.$root
+        fs.writeFileSync(vm.seedUrl, JSON.stringify(vm.seed))
+      },
+      getFlatArr() {
+        const vm = this.$root
+        let flatArr = []
+
+        vm.seed.forEach((item) => {
+          flatArr = flatArr.concat(item.children)
+        })
+
+        return flatArr
+      },
+      async fetchAlbum(){
+        const vm = this.$root
+
+        await vm.seed.forEachSync(async (seedItem, idxOut) => {
+          await new Promise((next) => {
+            if (seedItem.children) {
+              // console.log('已加载：', seedItem.title)
+              return next()
+            }
+
+            console.log('加载：' + seedItem.title)
+            $.get(seedItem.url, async (sHtml) => {
+              const links = await (sHtml.match(/<a href="\/video\/\d+">[^<>]+<\/a>/g) || []).mapSync(async (str) => {
+                const a = $(str)
+                const url = 'https://ninghao.net' + a.attr('href')
+                let videoUrl = ''
+
+                return {
+                  url,
+                  title: a.html(),
+                  videoUrl: '',
+                }
+              })
+
+              vm.$set(seedItem, 'children', links)
+              console.log('文件写入', seedItem.title)
+              vm.writeCache()
+              next()
+            })
+          })
+        })
+
+        vm.fetchVideoUrl(this.getFlatArr())
+      },
+      async fetchVideoUrl(flatArr) {
+        const vm = this.$root
+
+        async function loadMp4() {
+          while (flatArr.length > 0) {
+            const item = flatArr.shift()
+
+            if (item.videoUrl) {
+              // console.log(flatArr.length - i, '已加载：' + item.title)
+              continue
+            }
+
+            await new Promise((next) => {
+              console.log('加载', item.title)
+              $.get(item.url, (sHtml) => {
+                item.videoUrl = (sHtml.match(/https:\/\/.+\.mp4/) || [])[0] || ''
+                // console.log(item.videoUrl)
+                console.log(flatArr.length, '加载完毕 写入文件：' + item.title)
+                vm.writeCache()
+                next()
+              })
+            })
+          }
+        }
+
+        for (let i = 0; i < 10; i++) {
+          loadMp4()
+        }
+
+        this.downloadMp4()
+      },
+      downloadMp4() {
+        return
+        const vm = this.$root
+        const flatArr = this.getFlatArr()
+        let videoPath = './src/ninghao/video/'
+
+        !fs.existsSync(videoPath) && fs.mkdirSync(videoPath)
+
+        async function download(argument) {
+          while (flatArr.length > 0) {
+            const item = flatArr.shift()
+
+            if (fs.existsSync(item.videoPath)) {
+              console.log('mp4已加载：' + item.title)
+              continue
+            }
+
+            await new Promise((next) => {
+              console.log('mp4加载中：' + item.title)
+              https.get(item.url, (res) => {
+                let data = ''
+
+                res.on('data', chunk => data += chunk)
+                res.on('end', () => {
+                  console.log('mp4加载完毕，写入文件')
+                  console.log(item.videoPath)
+                  fs.writeFileSync(item.videoPath, data)
+                  vm.writeCache()
+                })
+              })
+            })
+          }
+        }
+        download()
+      },
+      updateRouter(json, isRouterPush) {
+        const vm = this.$root
+
+        vm.isRouterPush = isRouterPush
+
+        for (let key in json) {
+          vm.$set(vm.router, key, json[key])
+        }
+
+        setTimeout(() => {
+          delete vm.isRouterPush
+        }, 10)
+      },
+      playEnd() {
+        const vm = this.$root
+        const r = vm.router
+
+        vm.$delete(vm.mapPlayTime, vm.videoUrl)
+
+        if (vm.idxAlbum >= vm.curChannel.children.length - 1) {
+          if (vm.idxChannel >= vm.seed.length - 1) {
+            alert('播放完毕')
+          } else {
+            this.updateRouter({
+              idxChannel: vm.idxChannel + 1,
+              idxAlbum: 0,
+            }, 'push')
+          }
+        } else {
+          this.updateRouter({
+            idxAlbum: vm.idxAlbum + 1,
+          }, 'push')
+        }
+      },
+      handleTimeUpdate(e) {
+        const vm = this.$root
+        vm.$set(vm.mapPlayTime, vm.videoUrl, e.target.currentTime)
+        // vm.mapPlayTime[vm.videoUrl] = e.target.currentTime
+      },
+      initSeed() {
+        const vm = this.$root
+
+        const seedUrl = './src/ninghao/seed.json'
+        let seed = [] /*JSON.parse(fs.readFileSync(seedUrl))*/
+
+        if (window._require) {
+          vm.seed = seedFormat(JSON.parse(fs.readFileSync(seedUrl)))
+        } else {
+          $.get('/ninghao/seed.json', (data) => {
+            vm.seed = seedFormat(data)
+          })
+        }
+
+        function seedFormat(seed) {
+          seed.forEach((item) => {
+            item.children.forEach((item) => {
+              const src = item.videoUrl
+              item.videoPath = './src/ninghao/video/' + src.slice(src.lastIndexOf('/') + 1)
+            })
+          })
+
+          return seed
+        }
+      },
+    },
+    mounted() {
+      const vm = this.$root
+
+      this.initRouter()
+      this.initEvents()
+      this.initSeed()
+      // this.fetchAlbum()
+    }
+  })
+
+/*console.log(`
+var s = document.createElement('script')
+s.src = 'https://code.jquery.com/jquery-3.2.1.min.js'
+s.onload = function() {
+  var fullData = []
+  var count = 0
+  function loadPage() {
+    $.get('https://ninghao.net/course?page=' + count++, function(html) {
+      var data = [].slice.call(($(html).find('.thumbnails')[0] || {}).children || []).map(function(el) {
+        var me = $(el)
+        return {
+          title: me.find('.title').text().trim(),
+          alias: me.find('.alias').text().trim(),
+          url: me.find('a').attr('href'),
+        }
+      })
+      fullData = fullData.concat(data)
+      if (data.length === 0) {
+        console.log(JSON.stringify(fullData))
+        return
+      }
+      loadPage()
+    })
+  }
+  loadPage()
+}
+document.head.appendChild(s)
+`)*/
+
+})();
+</script>
+
+</body>
+</html>
